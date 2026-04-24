@@ -15,6 +15,8 @@ let activeScreen = state.activeScreen || "input";
 let remoteSave = null;
 let applyingRemote = false;
 let remoteReady = false;
+let remoteUrl = "";
+let lastRemoteSnapshot = "";
 
 const personList = document.querySelector("#personList");
 const submitStatus = document.querySelector("#submitStatus");
@@ -155,44 +157,60 @@ async function connectRemote() {
   if (!hasFirebaseConfig()) return;
 
   try {
-    const [{ initializeApp }, { getDatabase, ref, onValue, set }] = await Promise.all([
-      import("https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js"),
-      import("https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js"),
-    ]);
-
-    const app = initializeApp(window.firebaseConfig);
-    const db = getDatabase(app);
-    const roomRef = ref(db, `rooms/${roomId}`);
+    remoteUrl = `${window.firebaseConfig.databaseURL}/rooms/${roomId}.json`;
 
     remoteSave = async () => {
       if (applyingRemote) return;
-      await set(roomRef, structuredClone(state));
+      const snapshot = JSON.stringify(state);
+      lastRemoteSnapshot = snapshot;
+      await fetch(remoteUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: snapshot,
+      });
     };
 
-    onValue(roomRef, async (snapshot) => {
-      const remoteState = snapshot.val();
-
-      if (!remoteState && !remoteReady) {
-        remoteReady = true;
-        await remoteSave();
-        return;
-      }
-
-      if (!remoteState) return;
-
-      applyingRemote = true;
-      Object.assign(state, normalizeState(remoteState));
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      inputMonth = parseMonthKey(state.inputMonth);
-      resultMonth = parseMonthKey(state.resultMonth);
-      activeScreen = state.activeScreen || "input";
-      renderAll();
-      applyingRemote = false;
-      remoteReady = true;
-    });
+    await pullRemote(true);
+    window.setInterval(() => {
+      pullRemote(false).catch((error) => console.error(error));
+    }, 1500);
   } catch (error) {
     console.error(error);
   }
+}
+
+async function pullRemote(isInitial) {
+  if (!remoteUrl) return;
+
+  const response = await fetch(remoteUrl, {
+    method: "GET",
+    cache: "no-store",
+  });
+  const remoteState = await response.json();
+
+  if (!remoteState && !remoteReady) {
+    remoteReady = true;
+    await remoteSave();
+    return;
+  }
+
+  if (!remoteState) return;
+
+  const snapshot = JSON.stringify(remoteState);
+  if (!isInitial && snapshot === lastRemoteSnapshot) return;
+
+  lastRemoteSnapshot = snapshot;
+  applyingRemote = true;
+  Object.assign(state, normalizeState(remoteState));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  inputMonth = parseMonthKey(state.inputMonth);
+  resultMonth = parseMonthKey(state.resultMonth);
+  activeScreen = state.activeScreen || "input";
+  renderAll();
+  applyingRemote = false;
+  remoteReady = true;
 }
 
 function hasFirebaseConfig() {

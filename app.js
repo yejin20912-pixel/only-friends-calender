@@ -11,7 +11,7 @@ let selectedMode = "available";
 let inputMonth = parseMonthKey(state.inputMonth);
 let resultMonth = parseMonthKey(state.resultMonth);
 let selectedResultDateKey = "";
-let activeScreen = "input";
+let activeScreen = state.activeScreen || "input";
 let remoteSave = null;
 let applyingRemote = false;
 let remoteReady = false;
@@ -123,6 +123,7 @@ function defaultState() {
     submitted: Array.from({ length: PEOPLE_COUNT }, () => false),
     inputMonth: monthKey,
     resultMonth: monthKey,
+    activeScreen: "input",
   };
 }
 
@@ -143,6 +144,7 @@ function normalizeState(saved) {
     people: Array.from({ length: PEOPLE_COUNT }, (_, index) => saved.people?.[index] || DEFAULT_NAMES[index]),
     submitted: Array.from({ length: PEOPLE_COUNT }, (_, index) => Boolean(saved.submitted?.[index])),
     availability: saved.availability || {},
+    activeScreen: saved.activeScreen === "result" ? "result" : "input",
   };
 }
 
@@ -205,7 +207,7 @@ async function pullRemote(isInitial) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   inputMonth = parseMonthKey(state.inputMonth);
   resultMonth = parseMonthKey(state.resultMonth);
-  activeScreen = "input";
+  activeScreen = state.activeScreen;
   renderAll();
   applyingRemote = false;
   remoteReady = true;
@@ -254,6 +256,7 @@ function renderScreen() {
 
 function setScreen(screen) {
   activeScreen = screen;
+  state.activeScreen = screen;
   saveState();
   renderScreen();
 }

@@ -214,11 +214,7 @@ function ensureRoomId() {
   const url = new URL(window.location.href);
   const current = url.searchParams.get("room");
   if (current) return current;
-
-  const generated = Math.random().toString(36).slice(2, 9);
-  url.searchParams.set("room", generated);
-  window.history.replaceState(null, "", url.toString());
-  return generated;
+  return "main";
 }
 
 function renderAll() {

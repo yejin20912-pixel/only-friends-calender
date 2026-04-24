@@ -1,9 +1,9 @@
-export const firebaseConfig = {
-  apiKey: "PASTE_YOUR_API_KEY_HERE",
-  authDomain: "PASTE_YOUR_PROJECT_ID.firebaseapp.com",
-  databaseURL: "PASTE_YOUR_DATABASE_URL_HERE",
-  projectId: "PASTE_YOUR_PROJECT_ID",
-  storageBucket: "PASTE_YOUR_PROJECT_ID.firebasestorage.app",
-  messagingSenderId: "PASTE_YOUR_MESSAGING_SENDER_ID",
-  appId: "PASTE_YOUR_APP_ID",
+window.firebaseConfig = {
+  apiKey: "AIzaSyA3NYgCM1jNa4WrGq7NQ_28Axjs8o0UYzw",
+  authDomain: "only-frineds.firebaseapp.com",
+  databaseURL: "https://only-frineds-default-rtdb.firebaseio.com",
+  projectId: "only-frineds",
+  storageBucket: "only-frineds.firebasestorage.app",
+  messagingSenderId: "1076953565366",
+  appId: "1:1076953565366:web:7b525cc500d832d436be17",
 };

@@ -1,7 +1,9 @@
 const PEOPLE_COUNT = 6;
 const DEFAULT_NAMES = ["예원", "민경", "다원", "지은", "예린", "예진"];
-const STORAGE_KEY = "meeting-calendar-v5";
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+
+const roomId = ensureRoomId();
+const STORAGE_KEY = `meeting-calendar-v6:${roomId}`;
 
 const state = loadState();
 let selectedPerson = 0;
@@ -10,6 +12,9 @@ let inputMonth = parseMonthKey(state.inputMonth);
 let resultMonth = parseMonthKey(state.resultMonth);
 let selectedResultDateKey = "";
 let activeScreen = state.activeScreen || "input";
+let remoteSave = null;
+let applyingRemote = false;
+let remoteReady = false;
 
 const personList = document.querySelector("#personList");
 const submitStatus = document.querySelector("#submitStatus");
@@ -28,6 +33,7 @@ const showResultButton = document.querySelector("#showResultButton");
 
 bindEvents();
 renderAll();
+connectRemote();
 
 function bindEvents() {
   document.querySelectorAll(".status-button").forEach((button) => {
@@ -75,8 +81,7 @@ function bindEvents() {
 
   document.querySelector("#resetAllButton").addEventListener("click", () => {
     if (!confirm("모든 입력값과 제출 상태를 지울까요?")) return;
-    const nextState = defaultState();
-    Object.assign(state, nextState);
+    Object.assign(state, defaultState());
     selectedPerson = 0;
     selectedResultDateKey = "";
     inputMonth = parseMonthKey(state.inputMonth);
@@ -143,6 +148,77 @@ function normalizeState(saved) {
 function saveState() {
   state.activeScreen = activeScreen;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  syncRemote();
+}
+
+async function connectRemote() {
+  if (!hasFirebaseConfig()) return;
+
+  try {
+    const [{ initializeApp }, { getDatabase, ref, onValue, set }] = await Promise.all([
+      import("https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js"),
+      import("https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js"),
+    ]);
+
+    const app = initializeApp(window.firebaseConfig);
+    const db = getDatabase(app);
+    const roomRef = ref(db, `rooms/${roomId}`);
+
+    remoteSave = async () => {
+      if (applyingRemote) return;
+      await set(roomRef, structuredClone(state));
+    };
+
+    onValue(roomRef, async (snapshot) => {
+      const remoteState = snapshot.val();
+
+      if (!remoteState && !remoteReady) {
+        remoteReady = true;
+        await remoteSave();
+        return;
+      }
+
+      if (!remoteState) return;
+
+      applyingRemote = true;
+      Object.assign(state, normalizeState(remoteState));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      inputMonth = parseMonthKey(state.inputMonth);
+      resultMonth = parseMonthKey(state.resultMonth);
+      activeScreen = state.activeScreen || "input";
+      renderAll();
+      applyingRemote = false;
+      remoteReady = true;
+    });
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+function hasFirebaseConfig() {
+  return Boolean(
+    window.firebaseConfig &&
+      window.firebaseConfig.apiKey &&
+      window.firebaseConfig.apiKey !== "PASTE_YOUR_API_KEY_HERE" &&
+      window.firebaseConfig.databaseURL &&
+      window.firebaseConfig.databaseURL !== "PASTE_YOUR_DATABASE_URL_HERE",
+  );
+}
+
+function syncRemote() {
+  if (!remoteSave || applyingRemote) return;
+  remoteSave().catch((error) => console.error(error));
+}
+
+function ensureRoomId() {
+  const url = new URL(window.location.href);
+  const current = url.searchParams.get("room");
+  if (current) return current;
+
+  const generated = Math.random().toString(36).slice(2, 9);
+  url.searchParams.set("room", generated);
+  window.history.replaceState(null, "", url.toString());
+  return generated;
 }
 
 function renderAll() {

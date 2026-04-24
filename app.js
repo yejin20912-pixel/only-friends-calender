@@ -368,11 +368,7 @@ function renderResultCalendar() {
     const number = document.createElement("strong");
     number.textContent = String(date.getDate());
 
-    const badge = document.createElement("span");
-    badge.className = `day-count ${result.className}`;
-    badge.textContent = result.className === "none" ? "0명" : result.countText.replace(" 가능", "");
-
-    day.append(number, badge);
+    day.append(number);
     day.addEventListener("click", () => {
       selectedResultDateKey = key;
       renderResultCalendar();

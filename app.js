@@ -456,24 +456,22 @@ function getPersonStatus(dateKey, personIndex) {
 
 function getDateResult(dateKey) {
   let available = 0;
-  let maybe = 0;
 
   for (let index = 0; index < PEOPLE_COUNT; index += 1) {
     const status = getPersonStatus(dateKey, index);
     if (status === "available") available += 1;
-    else if (status === "maybe") maybe += 1;
   }
 
   if (available === PEOPLE_COUNT) {
     return { className: "perfect", countText: `${available}명 가능` };
   }
 
-  if (available > 0) {
+  if (available >= 3) {
     return { className: "partial", countText: `${available}명 가능` };
   }
 
-  if (maybe > 0) {
-    return { className: "partial", countText: "가능 0명" };
+  if (available >= 1) {
+    return { className: "rare", countText: `${available}명 가능` };
   }
 
   return { className: "none", countText: "가능 0명" };

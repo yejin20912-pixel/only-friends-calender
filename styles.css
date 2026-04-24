@@ -24,6 +24,8 @@
   --color-focus-ring: #111111;
   --color-brand-soft: #fff1ee;
   --color-brand-strong: #f0543a;
+  --color-rare-soft: #fff1ee;
+  --color-rare-strong: #d9482f;
   --color-available-soft: #ecfdf3;
   --color-available-strong: #16a34a;
   --color-maybe-soft: #fff7e6;
@@ -501,6 +503,11 @@ input,
   color: var(--color-maybe-strong);
 }
 
+.legend-chip.rare {
+  background: var(--color-rare-soft);
+  color: var(--color-rare-strong);
+}
+
 .legend-chip.busy,
 .legend-chip.none {
   background: #e7ebf0;
@@ -616,6 +623,11 @@ input,
   background: var(--color-maybe-soft);
 }
 
+.result-rare {
+  border-color: #f3b1a5;
+  background: var(--color-rare-soft);
+}
+
 .input-busy,
 .result-none {
   border-color: #dde1e7;
@@ -630,6 +642,10 @@ input,
 .input-maybe strong,
 .result-partial strong {
   color: var(--color-maybe-strong);
+}
+
+.result-rare strong {
+  color: var(--color-rare-strong);
 }
 
 .input-busy strong,

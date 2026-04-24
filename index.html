@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>약속시간표</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">6명 일정 조율</p>
+          <h1>약속시간표</h1>
+        </div>
+        <button class="icon-button" id="resetButton" type="button" title="초기화" aria-label="초기화">
+          ↺
+        </button>
+      </header>
+
+      <section class="share-panel" aria-live="polite">
+        <div>
+          <span class="label">공유 상태</span>
+          <strong id="syncStatus">준비 중</strong>
+        </div>
+        <button id="shareButton" type="button">링크 복사</button>
+      </section>
+
+      <section class="summary" aria-live="polite">
+        <div>
+          <span class="label">가장 좋은 시간</span>
+          <strong id="bestSlot">선택 전</strong>
+        </div>
+        <div>
+          <span class="label">가능 인원</span>
+          <strong id="bestCount">0/6</strong>
+        </div>
+      </section>
+
+      <section class="controls" aria-label="설정">
+        <label>
+          시작 날짜
+          <input id="startDate" type="date" />
+        </label>
+        <label>
+          표시 날짜
+          <select id="dayCount">
+            <option value="5">5일</option>
+            <option value="7" selected>7일</option>
+            <option value="10">10일</option>
+            <option value="14">14일</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="people" aria-label="친구 이름">
+        <div class="section-head">
+          <h2>친구</h2>
+          <button id="copyButton" type="button">결과 복사</button>
+        </div>
+        <div class="person-list" id="personList"></div>
+      </section>
+
+      <section class="modebar" aria-label="입력 모드">
+        <button class="mode active" type="button" data-mode="available">가능</button>
+        <button class="mode" type="button" data-mode="maybe">애매</button>
+        <button class="mode" type="button" data-mode="busy">불가</button>
+      </section>
+
+      <section class="grid-wrap" aria-label="시간표">
+        <div class="grid-hint">자기 이름을 선택한 뒤 시간칸을 누르세요.</div>
+        <div class="schedule" id="schedule"></div>
+      </section>
+
+      <section class="matches" aria-label="추천 시간">
+        <h2>추천 시간</h2>
+        <div id="recommendations" class="recommendations"></div>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,31 @@
+약속시간표 작업 저장 위치
+
+C:\Users\ADMIN\Desktop\약속시간표
+
+현재 저장된 파일
+
+- index.html: 화면 구조
+- styles.css: 모바일 화면 디자인
+- app.js: 약속방, 시간표, 추천 시간, 공유 기능 코드
+- firebase-config.js: Firebase 무료 공유 기능 설정값을 넣는 파일
+- README.md: GitHub Pages + Firebase 무료 배포 방법
+
+현재 상태
+
+- 한 기기에서 쓰는 로컬 모드는 바로 가능
+- 친구들이 각자 링크로 들어와 입력하는 공유 모드는 Firebase 설정값을 넣으면 작동
+- GitHub Pages에 올리면 무료 링크 공유 가능
+
+다음에 이어서 할 일
+
+1. Firebase에서 무료 프로젝트 만들기
+2. Realtime Database 만들기
+3. Firebase 앱 설정의 firebaseConfig 값을 firebase-config.js에 붙여넣기
+4. GitHub 저장소 만들기
+5. 약속시간표 폴더 파일들을 GitHub에 올리기
+6. GitHub Pages 켜기
+7. 생성된 링크 접속 후 상단의 링크 복사 버튼으로 친구들에게 공유
+
+주의
+
+firebase-config.js에 아직 PASTE_YOUR... 라고 적힌 값들이 남아 있으면 공유 모드는 켜지지 않고 로컬 모드로만 작동합니다.

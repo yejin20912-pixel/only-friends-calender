@@ -1,372 +1,432 @@
-import { firebaseConfig } from "./firebase-config.js";
-
 const PEOPLE_COUNT = 6;
-const TIMES = ["10:00", "12:00", "14:00", "16:00", "18:00", "20:00", "22:00"];
-const roomId = ensureRoomId();
-const STORAGE_KEY = `meeting-grid-v2:${roomId}`;
+const DEFAULT_NAMES = ["예원", "민경", "다원", "지은", "예린", "예진"];
+const STORAGE_KEY = "meeting-calendar-v5";
+const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+
 const state = loadState();
 let selectedPerson = 0;
 let selectedMode = "available";
-let remoteSave = null;
-let remoteReady = false;
-let applyingRemote = false;
+let inputMonth = parseMonthKey(state.inputMonth);
+let resultMonth = parseMonthKey(state.resultMonth);
+let selectedResultDateKey = "";
+let activeScreen = state.activeScreen || "input";
 
 const personList = document.querySelector("#personList");
-const schedule = document.querySelector("#schedule");
-const startDate = document.querySelector("#startDate");
-const dayCount = document.querySelector("#dayCount");
-const bestSlot = document.querySelector("#bestSlot");
-const bestCount = document.querySelector("#bestCount");
-const recommendations = document.querySelector("#recommendations");
-const syncStatus = document.querySelector("#syncStatus");
+const submitStatus = document.querySelector("#submitStatus");
+const perfectCount = document.querySelector("#perfectCount");
+const selectedPersonLabel = document.querySelector("#selectedPersonLabel");
+const selectedPersonGuide = document.querySelector("#selectedPersonGuide");
+const monthLabel = document.querySelector("#monthLabel");
+const resultMonthLabel = document.querySelector("#resultMonthLabel");
+const inputCalendar = document.querySelector("#inputCalendar");
+const resultCalendar = document.querySelector("#resultCalendar");
+const dateDetails = document.querySelector("#dateDetails");
+const inputScreen = document.querySelector("#inputScreen");
+const resultScreen = document.querySelector("#resultScreen");
+const showInputButton = document.querySelector("#showInputButton");
+const showResultButton = document.querySelector("#showResultButton");
 
-startDate.value = state.startDate;
-dayCount.value = String(state.dayCount);
-
+bindEvents();
 renderAll();
-connectRemote();
 
-document.querySelectorAll(".mode").forEach((button) => {
-  button.addEventListener("click", () => {
-    selectedMode = button.dataset.mode;
-    document.querySelectorAll(".mode").forEach((item) => item.classList.remove("active"));
-    button.classList.add("active");
+function bindEvents() {
+  document.querySelectorAll(".status-button").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedMode = button.dataset.mode;
+      document.querySelectorAll(".status-button").forEach((item) => item.classList.remove("is-active"));
+      button.classList.add("is-active");
+    });
   });
-});
 
-startDate.addEventListener("change", () => {
-  state.startDate = startDate.value;
-  saveAndRender();
-});
+  document.querySelector("#prevMonthButton").addEventListener("click", () => {
+    inputMonth = shiftMonth(inputMonth, -1);
+    state.inputMonth = toMonthKey(inputMonth);
+    saveState();
+    renderInputCalendar();
+  });
 
-dayCount.addEventListener("change", () => {
-  state.dayCount = Number(dayCount.value);
-  saveAndRender();
-});
+  document.querySelector("#nextMonthButton").addEventListener("click", () => {
+    inputMonth = shiftMonth(inputMonth, 1);
+    state.inputMonth = toMonthKey(inputMonth);
+    saveState();
+    renderInputCalendar();
+  });
 
-document.querySelector("#resetButton").addEventListener("click", () => {
-  if (!confirm("이 약속방의 일정을 모두 지울까요?")) return;
-  Object.assign(state, defaultState());
-  startDate.value = state.startDate;
-  dayCount.value = String(state.dayCount);
-  selectedPerson = 0;
-  saveAndRender();
-});
+  document.querySelector("#resultPrevMonthButton").addEventListener("click", () => {
+    resultMonth = shiftMonth(resultMonth, -1);
+    state.resultMonth = toMonthKey(resultMonth);
+    saveState();
+    renderResultCalendar();
+  });
 
-document.querySelector("#copyButton").addEventListener("click", async () => {
-  copyText(buildShareText(), "추천 시간이 복사됐습니다.");
-});
+  document.querySelector("#resultNextMonthButton").addEventListener("click", () => {
+    resultMonth = shiftMonth(resultMonth, 1);
+    state.resultMonth = toMonthKey(resultMonth);
+    saveState();
+    renderResultCalendar();
+  });
 
-document.querySelector("#shareButton").addEventListener("click", async () => {
-  copyText(window.location.href, "약속방 링크가 복사됐습니다.");
-});
+  document.querySelector("#submitButton").addEventListener("click", () => {
+    state.submitted[selectedPerson] = true;
+    saveState();
+    renderPeople();
+    renderSummary();
+  });
+
+  document.querySelector("#resetAllButton").addEventListener("click", () => {
+    if (!confirm("모든 입력값과 제출 상태를 지울까요?")) return;
+    const nextState = defaultState();
+    Object.assign(state, nextState);
+    selectedPerson = 0;
+    selectedResultDateKey = "";
+    inputMonth = parseMonthKey(state.inputMonth);
+    resultMonth = parseMonthKey(state.resultMonth);
+    activeScreen = "input";
+    saveState();
+    renderAll();
+  });
+
+  document.querySelector("#copyButton").addEventListener("click", async () => {
+    await copyText(buildSummaryText());
+  });
+
+  document.querySelector("#goToResultButton").addEventListener("click", () => {
+    setScreen("result");
+  });
+
+  document.querySelector("#backToInputButton").addEventListener("click", () => {
+    setScreen("input");
+  });
+
+  showInputButton.addEventListener("click", () => {
+    setScreen("input");
+  });
+
+  showResultButton.addEventListener("click", () => {
+    setScreen("result");
+  });
+}
 
 function defaultState() {
+  const now = new Date();
+  const monthKey = toMonthKey(new Date(now.getFullYear(), now.getMonth(), 1));
   return {
-    startDate: toDateInputValue(new Date()),
-    dayCount: 7,
-    people: Array.from({ length: PEOPLE_COUNT }, (_, index) => `친구 ${index + 1}`),
+    people: [...DEFAULT_NAMES],
     availability: {},
-    updatedAt: Date.now(),
+    submitted: Array.from({ length: PEOPLE_COUNT }, () => false),
+    inputMonth: monthKey,
+    resultMonth: monthKey,
+    activeScreen: "input",
   };
 }
 
 function loadState() {
-  const fallback = defaultState();
   try {
-    return normalizeState({ ...fallback, ...JSON.parse(localStorage.getItem(STORAGE_KEY)) });
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    return normalizeState(saved);
   } catch {
-    return fallback;
+    return defaultState();
   }
 }
 
-function normalizeState(nextState) {
+function normalizeState(saved) {
+  const fallback = defaultState();
   return {
-    ...defaultState(),
-    ...nextState,
-    people: Array.from({ length: PEOPLE_COUNT }, (_, index) => nextState.people?.[index] || `친구 ${index + 1}`),
-    availability: nextState.availability || {},
+    ...fallback,
+    ...saved,
+    people: Array.from({ length: PEOPLE_COUNT }, (_, index) => saved.people?.[index] || DEFAULT_NAMES[index]),
+    submitted: Array.from({ length: PEOPLE_COUNT }, (_, index) => Boolean(saved.submitted?.[index])),
+    availability: saved.availability || {},
   };
 }
 
-function ensureRoomId() {
-  const url = new URL(window.location.href);
-  const current = url.searchParams.get("room");
-  if (current) return current;
-
-  const generated = Math.random().toString(36).slice(2, 9);
-  url.searchParams.set("room", generated);
-  window.history.replaceState(null, "", url.toString());
-  return generated;
-}
-
-async function connectRemote() {
-  if (!hasFirebaseConfig()) {
-    syncStatus.textContent = "로컬 모드";
-    return;
-  }
-
-  syncStatus.textContent = "연결 중";
-
-  try {
-    const [{ initializeApp }, { getDatabase, ref, onValue, set }] = await Promise.all([
-      import("https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js"),
-      import("https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js"),
-    ]);
-
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
-    const roomRef = ref(db, `rooms/${roomId}`);
-
-    remoteSave = async () => {
-      if (applyingRemote) return;
-      state.updatedAt = Date.now();
-      await set(roomRef, structuredClone(state));
-    };
-
-    onValue(roomRef, async (snapshot) => {
-      const remoteState = snapshot.val();
-      if (!remoteState && !remoteReady) {
-        remoteReady = true;
-        await remoteSave();
-        syncStatus.textContent = "공유 중";
-        return;
-      }
-
-      if (remoteState) {
-        applyingRemote = true;
-        Object.assign(state, normalizeState(remoteState));
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        startDate.value = state.startDate;
-        dayCount.value = String(state.dayCount);
-        renderAll();
-        applyingRemote = false;
-      }
-
-      remoteReady = true;
-      syncStatus.textContent = "공유 중";
-    });
-  } catch (error) {
-    console.error(error);
-    syncStatus.textContent = "로컬 모드";
-  }
-}
-
-function hasFirebaseConfig() {
-  return Boolean(
-    firebaseConfig?.apiKey &&
-      firebaseConfig.apiKey !== "PASTE_YOUR_API_KEY_HERE" &&
-      firebaseConfig.databaseURL &&
-      firebaseConfig.databaseURL !== "PASTE_YOUR_DATABASE_URL_HERE",
-  );
-}
-
-function saveAndRender() {
-  saveState();
-  renderAll();
-}
-
-async function saveState() {
+function saveState() {
+  state.activeScreen = activeScreen;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  if (remoteSave) {
-    try {
-      syncStatus.textContent = "저장 중";
-      await remoteSave();
-      syncStatus.textContent = "공유 중";
-    } catch (error) {
-      console.error(error);
-      syncStatus.textContent = "저장 실패";
-    }
-  }
 }
 
 function renderAll() {
+  renderScreen();
   renderPeople();
-  renderSchedule();
   renderSummary();
+  renderInputCalendar();
+  renderResultCalendar();
+  renderDateDetails();
 }
 
-function getDates() {
-  const base = new Date(`${state.startDate}T00:00:00`);
-  return Array.from({ length: state.dayCount }, (_, index) => {
-    const date = new Date(base);
-    date.setDate(base.getDate() + index);
-    return date;
-  });
+function renderScreen() {
+  const isInput = activeScreen === "input";
+  inputScreen.classList.toggle("is-active", isInput);
+  resultScreen.classList.toggle("is-active", !isInput);
+  showInputButton.classList.toggle("is-active", isInput);
+  showResultButton.classList.toggle("is-active", !isInput);
+  showInputButton.setAttribute("aria-pressed", String(isInput));
+  showResultButton.setAttribute("aria-pressed", String(!isInput));
 }
 
-function keyFor(date, time) {
-  return `${toDateInputValue(date)}_${time}`;
+function setScreen(screen) {
+  activeScreen = screen;
+  saveState();
+  renderScreen();
 }
 
 function renderPeople() {
   personList.innerHTML = "";
-  state.people.forEach((name, index) => {
-    const item = document.createElement("div");
-    item.className = `person ${index === selectedPerson ? "active" : ""}`;
 
-    const avatar = document.createElement("button");
-    avatar.className = "avatar";
-    avatar.type = "button";
-    avatar.textContent = name.trim().slice(0, 1) || index + 1;
-    avatar.title = `${name} 선택`;
-    avatar.addEventListener("click", () => {
+  state.people.forEach((name, index) => {
+    const card = document.createElement("div");
+    card.className = `person-card${selectedPerson === index ? " is-active" : ""}${state.submitted[index] ? " is-done" : ""}`;
+
+    const selectButton = document.createElement("button");
+    selectButton.type = "button";
+    selectButton.className = "person-index";
+    selectButton.textContent = String(index + 1);
+    selectButton.setAttribute("aria-label", `${index + 1}번 친구 선택`);
+    selectButton.addEventListener("click", () => {
       selectedPerson = index;
       renderPeople();
+      renderInputCalendar();
     });
 
+    const body = document.createElement("div");
+    body.className = "person-body";
+
     const input = document.createElement("input");
+    input.type = "text";
+    input.className = "person-name";
     input.value = name;
+    input.placeholder = DEFAULT_NAMES[index];
     input.setAttribute("aria-label", `${index + 1}번 친구 이름`);
     input.addEventListener("focus", () => {
       selectedPerson = index;
       renderPeople();
+      renderInputCalendar();
     });
     input.addEventListener("input", () => {
-      state.people[index] = input.value || `친구 ${index + 1}`;
+      state.people[index] = input.value.trim() || DEFAULT_NAMES[index];
       saveState();
-      renderSchedule();
-      renderSummary();
+      renderPeople();
+      renderResultCalendar();
+      renderDateDetails();
     });
 
-    item.append(avatar, input);
-    personList.append(item);
-  });
-}
+    const badge = document.createElement("span");
+    badge.className = `person-badge ${state.submitted[index] ? "done" : "pending"}`;
+    badge.textContent = state.submitted[index] ? "제출 완료" : "작성 중";
 
-function renderSchedule() {
-  const dates = getDates();
-  schedule.innerHTML = "";
-
-  const grid = document.createElement("div");
-  grid.className = "grid";
-  grid.style.setProperty("--days", dates.length);
-
-  grid.append(cell("", "head time"));
-  dates.forEach((date) => {
-    grid.append(cell(formatDate(date), "head"));
+    body.append(input, badge);
+    card.append(selectButton, body);
+    personList.append(card);
   });
 
-  TIMES.forEach((time) => {
-    grid.append(cell(time, "time"));
-    dates.forEach((date) => {
-      const key = keyFor(date, time);
-      const values = state.availability[key] || {};
-      const available = countBy(values, "available");
-      const maybe = countBy(values, "maybe");
-      const slot = cell("", "slot");
-      if (available === PEOPLE_COUNT) slot.classList.add("best");
-
-      const count = document.createElement("div");
-      count.className = "slot-count";
-      count.textContent = `${available} 가능 · ${maybe} 애매`;
-
-      const chips = document.createElement("div");
-      chips.className = "chips";
-      state.people.forEach((name, personIndex) => {
-        const status = values[personIndex] || "busy";
-        const chip = document.createElement("span");
-        chip.className = `chip ${status}`;
-        chip.textContent = initials(name, personIndex);
-        chip.title = `${name}: ${statusLabel(status)}`;
-        chips.append(chip);
-      });
-
-      slot.addEventListener("click", () => {
-        state.availability[key] = { ...values, [selectedPerson]: selectedMode };
-        saveAndRender();
-      });
-
-      slot.append(count, chips);
-      grid.append(slot);
-    });
-  });
-
-  schedule.append(grid);
+  selectedPersonLabel.textContent = state.people[selectedPerson];
+  selectedPersonGuide.textContent = "가능한 날짜를 선택해주세요";
 }
 
 function renderSummary() {
-  const ranked = getRankedSlots();
-  const top = ranked[0];
+  submitStatus.textContent = `${state.submitted.filter(Boolean).length}/${PEOPLE_COUNT} 제출`;
+  perfectCount.textContent = `${getMonthPerfectCount(resultMonth)}일`;
+}
 
-  if (!top) {
-    bestSlot.textContent = "선택 전";
-    bestCount.textContent = `0/${PEOPLE_COUNT}`;
-    recommendations.innerHTML = `<p class="label">시간칸을 누르면 추천 시간이 표시됩니다.</p>`;
+function renderInputCalendar() {
+  inputCalendar.innerHTML = "";
+  monthLabel.textContent = formatMonth(inputMonth);
+  inputCalendar.append(createWeekdayRow());
+
+  const grid = document.createElement("div");
+  grid.className = "calendar-grid";
+
+  getCalendarDates(inputMonth).forEach(({ date, isCurrentMonth }) => {
+    const key = toDateKey(date);
+    const status = getPersonStatus(key, selectedPerson);
+    const day = document.createElement("button");
+    day.type = "button";
+    day.className = `day input-${status}${isCurrentMonth ? "" : " muted"}`;
+    day.setAttribute("aria-label", `${formatFullDate(key)} ${statusLabel(status)}`);
+
+    const number = document.createElement("strong");
+    number.textContent = String(date.getDate());
+
+    day.append(number);
+    day.addEventListener("click", () => {
+      togglePersonDate(key, status);
+    });
+
+    grid.append(day);
+  });
+
+  inputCalendar.append(grid);
+}
+
+function renderResultCalendar() {
+  resultCalendar.innerHTML = "";
+  resultMonthLabel.textContent = formatMonth(resultMonth);
+  perfectCount.textContent = `${getMonthPerfectCount(resultMonth)}일`;
+  resultCalendar.append(createWeekdayRow());
+
+  const grid = document.createElement("div");
+  grid.className = "calendar-grid";
+
+  getCalendarDates(resultMonth).forEach(({ date, isCurrentMonth }) => {
+    const key = toDateKey(date);
+    const result = getDateResult(key);
+    const day = document.createElement("button");
+    day.type = "button";
+    day.className = `day result-${result.className}${selectedResultDateKey === key ? " selected" : ""}${isCurrentMonth ? "" : " muted"}`;
+    day.setAttribute("aria-label", `${formatFullDate(key)} ${result.countText}`);
+
+    const number = document.createElement("strong");
+    number.textContent = String(date.getDate());
+
+    const badge = document.createElement("span");
+    badge.className = `day-count ${result.className}`;
+    badge.textContent = result.className === "none" ? "0명" : result.countText.replace(" 가능", "");
+
+    day.append(number, badge);
+    day.addEventListener("click", () => {
+      selectedResultDateKey = key;
+      renderResultCalendar();
+      renderDateDetails();
+    });
+
+    grid.append(day);
+  });
+
+  resultCalendar.append(grid);
+}
+
+function renderDateDetails() {
+  if (!selectedResultDateKey) {
+    dateDetails.textContent = "결과 달력에서 날짜를 누르면 가능한 사람 이름이 표시됩니다.";
     return;
   }
 
-  bestSlot.textContent = `${formatDate(top.date)} ${top.time}`;
-  bestCount.textContent = `${top.available}/${PEOPLE_COUNT}`;
-  recommendations.innerHTML = "";
+  const availableNames = [];
+  const maybeNames = [];
+  const busyNames = [];
 
-  ranked.slice(0, 5).forEach((slot) => {
-    const item = document.createElement("div");
-    item.className = "rec";
-    item.innerHTML = `<strong>${formatDate(slot.date)} ${slot.time}</strong><span>${slot.available} 가능 · ${slot.maybe} 애매</span>`;
-    recommendations.append(item);
+  state.people.forEach((name, index) => {
+    const status = getPersonStatus(selectedResultDateKey, index);
+    if (status === "available") availableNames.push(name);
+    else if (status === "maybe") maybeNames.push(name);
+    else busyNames.push(name);
   });
+
+  dateDetails.innerHTML = `
+    <strong>${formatFullDate(selectedResultDateKey)}</strong>
+    <p>가능: ${availableNames.length ? availableNames.join(", ") : "없음"}</p>
+    <p>애매: ${maybeNames.length ? maybeNames.join(", ") : "없음"}</p>
+    <p>불가: ${busyNames.length ? busyNames.join(", ") : "없음"}</p>
+  `;
 }
 
-function getRankedSlots() {
-  const rows = [];
-  getDates().forEach((date) => {
-    TIMES.forEach((time) => {
-      const values = state.availability[keyFor(date, time)] || {};
-      const available = countBy(values, "available");
-      const maybe = countBy(values, "maybe");
-      if (available > 0 || maybe > 0) rows.push({ date, time, available, maybe });
+function togglePersonDate(key, currentStatus) {
+  const nextStatus = currentStatus === selectedMode ? "busy" : selectedMode;
+  const values = { ...(state.availability[key] || {}) };
+  values[selectedPerson] = nextStatus;
+  state.availability[key] = values;
+  state.submitted[selectedPerson] = false;
+  saveState();
+  renderInputCalendar();
+  renderResultCalendar();
+  renderPeople();
+  renderSummary();
+  renderDateDetails();
+}
+
+function createWeekdayRow() {
+  const row = document.createElement("div");
+  row.className = "weekday-row";
+  WEEKDAYS.forEach((weekday) => {
+    const cell = document.createElement("div");
+    cell.className = "weekday";
+    cell.textContent = weekday;
+    row.append(cell);
+  });
+  return row;
+}
+
+function getCalendarDates(monthDate) {
+  const firstDay = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+  const lastDay = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0);
+  const firstGridDate = new Date(firstDay);
+  firstGridDate.setDate(firstGridDate.getDate() - firstGridDate.getDay());
+  const lastGridDate = new Date(lastDay);
+  lastGridDate.setDate(lastGridDate.getDate() + (6 - lastGridDate.getDay()));
+
+  const dates = [];
+  for (let cursor = new Date(firstGridDate); cursor <= lastGridDate; cursor.setDate(cursor.getDate() + 1)) {
+    dates.push({
+      date: new Date(cursor),
+      isCurrentMonth: cursor.getMonth() === monthDate.getMonth(),
     });
-  });
-
-  return rows.sort((a, b) => b.available - a.available || b.maybe - a.maybe);
+  }
+  return dates;
 }
 
-function buildShareText() {
-  const ranked = getRankedSlots().slice(0, 5);
-  if (!ranked.length) return "아직 입력된 시간이 없습니다.";
-  return ranked
-    .map((slot, index) => `${index + 1}. ${formatDate(slot.date)} ${slot.time}: ${slot.available}/${PEOPLE_COUNT} 가능, ${slot.maybe}명 애매`)
+function getPersonStatus(dateKey, personIndex) {
+  return state.availability[dateKey]?.[personIndex] || "busy";
+}
+
+function getDateResult(dateKey) {
+  let available = 0;
+  let maybe = 0;
+
+  for (let index = 0; index < PEOPLE_COUNT; index += 1) {
+    const status = getPersonStatus(dateKey, index);
+    if (status === "available") available += 1;
+    else if (status === "maybe") maybe += 1;
+  }
+
+  if (available === PEOPLE_COUNT) {
+    return { className: "perfect", countText: `${available}명 가능` };
+  }
+
+  if (available > 0) {
+    return { className: "partial", countText: `${available}명 가능` };
+  }
+
+  if (maybe > 0) {
+    return { className: "partial", countText: "가능 0명" };
+  }
+
+  return { className: "none", countText: "가능 0명" };
+}
+
+function getMonthPerfectCount(monthDate) {
+  return getCalendarDates(monthDate)
+    .filter(({ isCurrentMonth }) => isCurrentMonth)
+    .filter(({ date }) => getDateResult(toDateKey(date)).className === "perfect").length;
+}
+
+function buildSummaryText() {
+  return getCalendarDates(resultMonth)
+    .filter(({ isCurrentMonth }) => isCurrentMonth)
+    .map(({ date }) => {
+      const key = toDateKey(date);
+      const available = [];
+      const maybe = [];
+      const busy = [];
+
+      state.people.forEach((name, index) => {
+        const status = getPersonStatus(key, index);
+        if (status === "available") available.push(name);
+        else if (status === "maybe") maybe.push(name);
+        else busy.push(name);
+      });
+
+      return `${formatFullDate(key)} - 가능 ${available.length}명(${available.join(", ") || "없음"}), 애매 ${maybe.length}명(${maybe.join(", ") || "없음"}), 불가 ${busy.length}명`;
+    })
     .join("\n");
 }
 
-async function copyText(text, message) {
+async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);
-    alert(message);
+    alert("결과를 복사했습니다.");
   } catch {
     prompt("아래 내용을 복사하세요.", text);
   }
-}
-
-function countBy(values, target) {
-  return Object.values(values).filter((value) => value === target).length;
-}
-
-function cell(text, className) {
-  const element = document.createElement("div");
-  element.className = `cell ${className}`;
-  element.textContent = text;
-  return element;
-}
-
-function formatDate(date) {
-  return new Intl.DateTimeFormat("ko-KR", {
-    month: "numeric",
-    day: "numeric",
-    weekday: "short",
-  }).format(date);
-}
-
-function toDateInputValue(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function initials(name, index) {
-  return name.trim().slice(0, 2) || String(index + 1);
 }
 
 function statusLabel(status) {
@@ -375,4 +435,33 @@ function statusLabel(status) {
     maybe: "애매",
     busy: "불가",
   }[status];
+}
+
+function shiftMonth(date, amount) {
+  return new Date(date.getFullYear(), date.getMonth() + amount, 1);
+}
+
+function parseMonthKey(value) {
+  return new Date(`${value}T00:00:00`);
+}
+
+function toMonthKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+function toDateKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function formatMonth(date) {
+  return `${date.getFullYear()}년 ${date.getMonth() + 1}월`;
+}
+
+function formatFullDate(key) {
+  const date = new Date(`${key}T00:00:00`);
+  return new Intl.DateTimeFormat("ko-KR", {
+    month: "long",
+    day: "numeric",
+    weekday: "short",
+  }).format(date);
 }
